@@ -187,5 +187,3 @@
     </script>
 </body>
 </html>
-
-berandaa.php
