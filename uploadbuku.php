@@ -214,6 +214,15 @@ if (isset($_GET['action']) && $_GET['action'] == 'edit' && isset($_GET['id'])) {
             </tbody>
         </table>
     </div>
+
+    <!-- Footer -->
+    <footer class="bg-gradient-to-r from-gray-500 to-blue-900 text-white py-12">
+        <div class="container mx-auto text-center">
+            <h2 class="text-2xl font-bold tracking-tight">DIGILAB</h2>
+            <p class="mt-2 text-lg">Platform inovatif untuk mengakses koleksi buku secara online dengan mudah.</p>
+            <p class="text-sm mt-4">&copy; 2024 DIGILAB. All rights reserved.</p>
+        </div>
+    </footer>
 </body>
 
 </html>
