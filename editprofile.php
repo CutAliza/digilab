@@ -1,5 +1,6 @@
 <?php
 session_start();
+include 'dbconfig.php';
 
 // Cek jika pengguna sudah login, jika tidak, arahkan ke halaman login
 if (!isset($_SESSION['user_id'])) {
@@ -8,20 +9,98 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Ambil data pengguna dari sesi
-$username = isset($_SESSION['username']) ? $_SESSION['username'] : 'Pengguna';
-$user_email = isset($_SESSION['email']) ? $_SESSION['email'] : 'Email tidak tersedia';
-?>
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? 'Pengguna';
+$user_email = $_SESSION['email'] ?? 'Email tidak tersedia';
+$user_img = $_SESSION['img'] ?? 'default.jpg'; // Default image if no image is uploaded
 
+$message = ""; // Variabel untuk menyimpan pesan sukses atau error
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    // Update foto profil
+    if (isset($_FILES['img']) && $_FILES['img']['error'] == 0) {
+        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+        $file_type = mime_content_type($_FILES['img']['tmp_name']);
+
+        if (in_array($file_type, $allowed_types)) {
+            $upload_dir = __DIR__ . '/uploads/'; // Jalur absolut
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0755, true); // Membuat folder jika belum ada
+            }
+
+            $file_name = uniqid() . '_' . basename($_FILES['img']['name']);
+            $upload_file = $upload_dir . $file_name;
+
+            if (move_uploaded_file($_FILES['img']['tmp_name'], $upload_file)) {
+                // Update the database with the new image name
+                $stmt = $conn->prepare("UPDATE users SET img = ? WHERE id = ?");
+                $stmt->bind_param("si", $file_name, $user_id);
+                $stmt->execute();
+                $stmt->close();
+                
+                // Update session variable for image
+                $_SESSION['img'] = $file_name;
+                
+                $message = "Foto profil berhasil diperbarui.";
+            } else {
+                $message = "Gagal mengunggah foto profil.";
+            }
+        } else {
+            $message = "Hanya file gambar (JPG, PNG, GIF) yang diperbolehkan.";
+        }
+    }
+
+    // Update username
+    if (isset($_POST['username']) && !empty(trim($_POST['username']))) {
+        $new_username = $conn->real_escape_string(trim($_POST['username']));
+        $stmt = $conn->prepare("UPDATE users SET username = ? WHERE id = ?");
+        $stmt->bind_param("si", $new_username, $user_id);
+        $stmt->execute();
+        $stmt->close();
+
+        $_SESSION['username'] = $new_username;
+        $message = "Nama pengguna berhasil diperbarui.";
+    }
+
+    // Update password
+    if (isset($_POST['password']) && isset($_POST['confirm_password'])) {
+        $password = trim($_POST['password']);
+        $confirm_password = trim($_POST['confirm_password']);
+
+        if (!empty($password) && $password === $confirm_password) {
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $stmt->bind_param("si", $hashed_password, $user_id);
+            $stmt->execute();
+            $stmt->close();
+            $message = "Kata sandi berhasil diperbarui.";
+        } elseif (!empty($password)) {
+            $message = "Kata sandi tidak cocok.";
+        }
+    }
+}
+
+// Ambil data pengguna untuk ditampilkan di form
+$stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$user_data = $result->fetch_assoc();
+$stmt->close();
+$conn->close();
+
+// Set the user image path
+$img = !empty($user_data['img']) ? 'uploads/' . $user_data['img'] : 'default.jpg'; // Use a default image if none is set
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Profile</title>
+    <title>Edit Profil</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 flex flex-col min-h-screen">
-
+<body class="bg-gray-100">
     <!-- Navbar -->
     <nav class="bg-gradient-to-r from-gray-400 to-blue-700 text-white py-3 px-4 sticky top-0 z-50 shadow-md flex items-center justify-between">
         <!-- Logo -->
@@ -39,192 +118,116 @@ $user_email = isset($_SESSION['email']) ? $_SESSION['email'] : 'Email tidak ters
             <a href="pengembalian.php" class="hover:underline">Pengembalian</a>
         </div>
 
-          <!-- Bagian Ikon dan Dropdown -->
-          <div class="flex items-center space-x-4">
+        <!-- Bagian Ikon dan Dropdown -->
+        <div class="flex items-center space-x-4">
             <!-- Search and Icons -->
-    <div class="flex items-center space-x-4">
-        <!-- Search Input -->
-        <input type="text" placeholder="Search" class="px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div class="flex items-center space-x-4">
+                <!-- Search Input -->
+                <input type="text" placeholder="Search" class="px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
 
-        <!-- Search Icon -->
-        <a href="beranda.php" class="hover:underline text-white">
-            <span class="material-icons-outlined">search</span>
-        </a>
+                <!-- Search Icon -->
+                <a href="beranda.php" class="hover:underline text-white">
+                    <span class="material-icons-outlined">search</span>
+                </a>
 
-        <!-- Notification Icon -->
-        <button class="relative hover:underline text-white">
-            <span class="material-icons-outlined">notifications</span>
-            <!-- Notification Badge -->
-            <span class="absolute top-0 right-0 text-xs bg-red-600 text-white rounded-full px-1">3</span>
-        </button> 
+                <!-- Notification Icon -->
+                <button class="relative hover:underline text-white">
+                    <span class="material-icons-outlined">notifications</span>
+                    <!-- Notification Badge -->
+                    <span class="absolute top-0 right-0 text-xs bg-red-600 text-white rounded-full px-1">3</span>
+                </button> 
 
-            <!-- Dropdown Profil -->
-            <div class="relative">
-                <!-- Trigger -->
-                <button onclick="toggleDropdown()" class="flex items-center space-x-3 bg-white text-black px-4 py-2 rounded-full">
-                    <img src="https://via.placeholder.com/50" alt="Foto Profil" class="w-10 h-10 rounded-full object-cover">
-                    <span><?php echo htmlspecialchars($username); ?></span>
-                </button>
+                <!-- Tambahkan Google Material Icons -->
+                <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
 
-                <!-- Dropdown Menu -->
-                <div id="dropdownMenu" class="hidden absolute right-0 mt-2 w-64 bg-white text-black rounded-lg shadow-lg">
-                    <!-- Profil Header -->
-                    <div class="flex items-center p-4 border-b border-gray-700">
-                        <img src="https://via.placeholder.com/50" alt="Foto Profil" class="w-12 h-12 rounded-full object-cover">
-                        <div class="ml-3">
-                            <h2 class="font-semibold"><?php echo htmlspecialchars($username); ?></h2>
-                            <p class="text-gray-400 text-sm"><?php echo htmlspecialchars($user_email); ?></p>
-                            <a href="profil.php" class="text-blue-400 text-sm hover:underline">Lihat channel Anda</a>
+                <!-- Dropdown Profil -->
+                <div class="relative">
+                    <!-- Trigger -->
+                    <button onclick="toggleDropdown()" class="flex items-center space-x-3 bg-white text-black px-4 py-2 rounded-full">
+                        <img src="<?php echo $img; ?>" alt="Foto Profil" class="w-10 h-10 rounded-full object-cover">
+                        <span><?php echo htmlspecialchars($username); ?></span>
+                    </button>
+
+                    <!-- Dropdown Menu -->
+                    <div id="dropdownMenu" class="hidden absolute right-0 mt-2 w-64 bg-gray-900 text-white rounded-lg shadow-lg">
+                        <!-- Profil Header -->
+                        <div class="flex items-center p-4 border-b border-gray-700">
+                            <img src="<?php echo $img; ?>" alt="Foto Profil" class="w-12 h-12 rounded-full object-cover">
+                            <div class="ml-3">
+                                <h2 class="font-semibold"><?php echo htmlspecialchars($username); ?></h2>
+                                <p class="text-gray-400 text-sm"><?php echo htmlspecialchars($user_email); ?></p>
+                                <!-- Mengarah ke halaman profil -->
+                                <a href="profil.php" class="text-blue-400 text-sm hover:underline">Lihat channel Anda</a>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Menu Options -->
-                    <ul class="py-2 text-sm">
-                        <li>
-                            <a href="editprofile.php" class="block px-4 py-2 hover:bg-gray-700">Edit Profil</a>
-                        </li>
-                        <li>
-                            <a href="ganti_akun.php" class="block px-4 py-2 hover:bg-gray-700">Ganti Akun</a>
-                        </li>
-                        <li>
-                            <a href="logout.php" class="block px-4 py-2 hover:bg-gray-700">Logout</a>
-                        </li>
-                    </ul>
+                        <!-- Menu Options -->
+                        <ul class="py-2 text-sm">
+                            <li>
+                                <a href="profile.php" class="block px-4 py-2 hover:bg-gray-700">Edit Profil</a>
+                            </li>
+                            <li>
+                                <a href="ganti_akun.php" class="block px-4 py-2 hover:bg-gray-700">Ganti Akun</a>
+                            </li>
+                            <li>
+                                <a href="logout.php" class="block px-4 py-2 hover:bg-gray-700">Logout</a>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
     </nav>
 
-<!-- Tambahkan Google Material Icons -->
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+   <div class="container mx-auto mt-8">
+    <div class="max-w-lg mx-auto bg-white p-6 rounded shadow">
+        <h1 class="text-2xl font-bold mb-4">Edit Profil</h1>
 
-<script>
-    // Script untuk toggle dropdown
-    function toggleDropdown() {
-        const dropdown = document.getElementById('dropdownMenu');
-        dropdown.classList.toggle('hidden');
-    }
-</script>
+        <!-- Pesan Sukses/Error -->
+        <?php if (!empty($message)): ?>
+            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg" role="alert">
+                <?php echo htmlspecialchars($message); ?>
+            </div>
+        <?php endif; ?>
 
-
-    <!-- Content -->
-    <div class="container mx-auto mt-8">
-        <div class="max-w-lg mx-auto bg-white p-6 rounded shadow">
-            <h1 class="text-2xl font-bold mb-4">Edit Profil</h1>
-            <form action="editprofil.php" method="POST" enctype="multipart/form-data" class="space-y-4">
-                <div>
-                    <label for="profile_picture" class="block text-gray-700 font-bold mb-2">Ganti Foto Profil</label>
-                    <input type="file" name="profile_picture" id="profile_picture" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                </div>
-                <div>
-                    <label for="username" class="block text-gray-700 font-bold mb-2">Nama Pengguna</label>
-                    <input type="text" name="username" id="username" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                </div>
-                <div>
-                    <label for="password" class="block text-gray-700 font-bold mb-2">Kata Sandi Baru</label>
-                    <input type="password" name="password" id="password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                </div>
-                <div>
-                    <label for="confirm_password" class="block text-gray-700 font-bold mb-2">Konfirmasi Kata Sandi Baru</label>
-                    <input type="password" name="confirm_password" id="confirm_password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                </div>
-                <div class="flex items-center justify-between">
-                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Simpan Perubahan</button>
-                </div>
-            </form>
-        </div>
+        <form action="profile.php" method="POST" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label for="img" class="block font-medium">Ganti Foto Profil</label>
+                <input type="file" name="img" id="img" class="block w-full">
+            </div>
+            <div>
+                <label for="username" class="block font-medium">Nama Pengguna</label>
+                <input type="text" name="username" id="username" 
+                       value="<?php echo htmlspecialchars($user_data['username']); ?>" 
+                       class="block w-full">
+            </div>
+            <div>
+                <label for="password" class="block font-medium">Kata Sandi Baru</label>
+                <input type="password" name="password" id="password" class="block w-full">
+            </div>
+            <div>
+                <label for="confirm_password" class="block font-medium">Konfirmasi Kata Sandi Baru</label>
+                <input type="password" name="confirm_password" id="confirm_password" class="block w-full">
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Simpan</button>
+            </div>
+        </form>
     </div>
-    <!-- Footer -->
-    <footer class="bg-gradient-to-r from-gray-500 to-blue-900 text-white py-12">
-        <div class="container mx-auto px-6 lg:px-8">
-            <div class="flex flex-col md:flex-row justify-between items-center space-y-6 md:space-y-0">
+</div>
 
-                <!-- DIGILAB Section -->
-                <div class="text-center md:text-left">
-                    <h2 class="text-2xl font-bold tracking-tight">DIGILAB</h2>
-                    <p class="mt-2 text-lg">Platform inovatif untuk mengakses koleksi buku secara online dengan mudah.</p>
-                </div>
+<!-- Tambahkan margin bawah pada container atau div sebelum footer -->
+<div class="mb-12"></div> <!-- Tambahkan jarak di sini -->
 
-                <!-- Library Partners Section -->
-                <div class="mt-4 md:mt-0">
-                    <h3 class="text-2xl font-semibold mb-4">Library Partners</h3>
-                    <ul class="space-y-3 text-sm md:text-base">
-                        <li><a href="#" class="hover:text-blue-200 transition duration-300 ease-in-out">Perpustakaan Nasional</a></li>
-                        <li><a href="#" class="hover:text-blue-200 transition duration-300 ease-in-out">Perpustakaan Universitas</a></li>
-                    </ul>
-                </div>
-            </div>
+<!-- Footer -->
+<footer class="bg-gradient-to-r from-gray-500 to-blue-900 text-white py-12">
+    <div class="container mx-auto text-center">
+        <h2 class="text-2xl font-bold tracking-tight">DIGILAB</h2>
+        <p class="mt-2 text-lg">Platform inovatif untuk mengakses koleksi buku secara online dengan mudah.</p>
+        <p class="text-sm mt-4">&copy; 2024 DIGILAB. All rights reserved.</p>
+    </div>
+</footer>
 
-            <!-- Social Media Links -->
-            <div class="text-center">
-                <h4 class="text-xl font-semibold">Follow Us</h4>
-                <div>
-                    <a href="#" class="text-white hover:text-blue-200 transition duration-300 ease-in-out">
-                        <i class="fab fa-facebook fa-3x"></i>
-                    </a>
-                    <a href="#" class="text-white hover:text-blue-200 transition duration-300 ease-in-out">
-                        <i class="fab fa-youtube fa-2x"></i>
-                    </a>
-                </div>
-            </div>
 
-            <!-- Digilab Website Link -->
-            <div class="mt-6 text-center">
-                <p class="text-blue-100 hover:text-blue-200 transition duration-300 ease-in-out">digilab.com</a>
-                </p>
-            </div>
-        </div>
-
-        <!-- Footer Bottom -->
-        <div class="mt-12 border-t-2 border-blue-800 pt-4 text-center text-sm">
-            <p>&copy; 2024 DIGILAB. All rights reserved.</p>
-        </div>
-    </footer>
 </body>
 </html>
-
-<?php
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $conn = new mysqli('localhost', 'username', 'password', 'digilab');
-
-    if ($conn->connect_error) {
-        die("Connection failed: " . $conn->connect_error);
-    }
-
-    $user_id = 1; // Assume the user ID is 1, replace with actual logged-in user ID
-
-    // Handle file upload
-    if (isset($_FILES['profile_picture']) && $_FILES['profile_picture']['error'] == 0) {
-        $upload_dir = 'uploads/';
-        $upload_file = $upload_dir . basename($_FILES['profile_picture']['name']);
-        if (move_uploaded_file($_FILES['profile_picture']['tmp_name'], $upload_file)) {
-            $sql = "UPDATE users SET profile_picture='$upload_file' WHERE id=$user_id";
-            $conn->query($sql);
-        }
-    }
-
-    // Handle username change
-    if (isset($_POST['username'])) {
-        $username = $conn->real_escape_string($_POST['username']);
-        $sql = "UPDATE users SET username='$username' WHERE id=$user_id";
-        $conn->query($sql);
-    }
-
-    // Handle password change
-    if (isset($_POST['password']) && isset($_POST['confirm_password'])) {
-        $password = $_POST['password'];
-        $confirm_password = $_POST['confirm_password'];
-        if ($password == $confirm_password) {
-            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $sql = "UPDATE users SET password='$hashed_password' WHERE id=$user_id";
-            $conn->query($sql);
-        } else {
-            echo "Passwords do not match.";
-        }
-    }
-
-    $conn->close();
-    header('Location: profil.php');
-    exit();
-}
-?>
